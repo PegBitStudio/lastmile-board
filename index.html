@@ -317,6 +317,33 @@ async function save(){
   }
 }
 
+function queue(){ dirty = true; say(); clearTimeout(timer); timer = setTimeout(save, 2500); }
+
+function wire(){
+  document.querySelectorAll(".wknav button").forEach(function(b){ b.onclick = function(){ view = b.dataset.week; paint(); }; });
+  document.querySelectorAll(".row [data-act]").forEach(function(el){
+    el.onclick = function(){
+      var id = el.closest(".row").dataset.id;
+      var t = state.tasks.find(function(x){ return x.id === id; });
+      if(!t) return;
+      var a = el.dataset.act;
+      if(a === "status"){
+        t.s = STATUSES[(STATUSES.indexOf(t.s) + 1) % STATUSES.length];
+        if(t.s === "done") t.d = new Date().toISOString().slice(0,10);
+        else delete t.d;
+      }
+      if(a === "owner")  t.o = OWNERS[(OWNERS.indexOf(t.o) + 1) % OWNERS.length];
+      if(a === "star")   t.t = t.t ? 0 : 1;
+      paint(); queue();
+    };
+  });
+  document.querySelectorAll(".blockers textarea").forEach(function(ta){
+    ta.oninput = function(){ state.blockers[ta.dataset.who] = ta.value; queue(); };
+  });
+  var btn = document.getElementById("savebtn");
+  if(btn) btn.onclick = function(){ clearTimeout(timer); save(); };
+}
+
 (function start(){
   let seed = STATE;
   try{
