@@ -102,6 +102,14 @@ section{margin-bottom:2.5rem}
 .blockers label{display:block;font-family:var(--mono);font-size:.5625rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-bottom:.3rem}
 .blockers textarea{width:100%;min-height:3.4rem;resize:vertical;font-family:var(--body);font-size:.9rem;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:.5rem .6rem;line-height:1.4}
 .blockers textarea:focus{outline:2px solid var(--amber);outline-offset:1px}
+.blockers input{width:100%;font-family:var(--body);font-size:.9rem;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:.5rem .6rem;line-height:1.4}
+.blockers input:focus{outline:2px solid var(--amber);outline-offset:1px}
+.blist{list-style:none;margin:.5rem 0 0;padding:0}
+.blist li{display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:start;padding:.4rem 0;border-bottom:1px solid var(--rule);font-size:.9rem}
+.blist li:last-child{border-bottom:0}
+.del{background:none;border:0;cursor:pointer;color:var(--mute);font-size:1rem;line-height:1;padding:0 .25rem}
+.del:hover{color:var(--rust)}
+.bnone{font-size:.875rem;color:var(--mute);font-style:italic;margin:.5rem 0 0}
 
 /* week nav */
 .wknav{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1rem}
@@ -151,6 +159,31 @@ let state = null, mode = "local", view = "now", dirty = false, timer = null, art
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function daysTo(iso){ return Math.ceil((new Date(iso+"T23:59:59+01:00") - new Date())/864e5); }
+
+function normaliseBlockers(st){
+  if(!st.blockers) st.blockers = {};
+  ["D","Y"].forEach(function(k){
+    var v = st.blockers[k];
+    if(Array.isArray(v)) return;
+    st.blockers[k] = (typeof v === "string" && v.trim()) ? [v.trim()] : [];
+  });
+  return st;
+}
+
+function blockerHTML(who){
+  var name = OWNER_NAME[who];
+  var list = (state.blockers[who] || []);
+  return '<div><label for="b' + who + '">' + name + ' \u2014 what is stopping me</label>'
+    + '<input id="b' + who + '" data-badd="' + who + '" type="text" autocomplete="off" '
+    + 'placeholder="Type it and press Enter">'
+    + (list.length
+        ? '<ul class="blist">' + list.map(function(item, i){
+            return '<li><span>' + esc(item) + '</span>'
+              + '<button class="del" type="button" data-bdel="' + who + '" data-i="' + i + '" '
+              + 'title="Remove" aria-label="Remove">\u00d7</button></li>'; }).join("") + '</ul>'
+        : '<p class="bnone">Nothing right now.</p>')
+    + '</div>';
+}
 
 function counts(who){
   const mine = state.tasks.filter(t => t.o===who || t.o==="B");
@@ -548,7 +581,7 @@ function planHTML(){
 }
 
 function renderBody(st){
-  state = st;
+  state = normaliseBlockers(st);
   const today = state.tasks.filter(t => t.t && t.s!=="done");
   const wk = WEEKS.find(w => w.k===view) || WEEKS[0];
   const inWeek = view === "done"
@@ -581,10 +614,7 @@ function renderBody(st){
 
     + (!isTaskView ? '' : '<section><h2>Today</h2><p class="sub">Starred tasks that are not finished. Star anything below to pin it here.</p>'
     + '<div class="lanes">' + laneHTML("D", today) + laneHTML("Y", today) + '</div>'
-    + '<div class="blockers">'
-    + '<div><label for="bd">Dami — what is blocking me</label><textarea id="bd" data-who="D" placeholder="Nothing right now">' + esc(state.blockers.D) + '</textarea></div>'
-    + '<div><label for="by">Yashfa — what is blocking me</label><textarea id="by" data-who="Y" placeholder="Nothing right now">' + esc(state.blockers.Y) + '</textarea></div>'
-    + '</div></section>')
+    + '<div class="blockers">' + blockerHTML("D") + blockerHTML("Y") + '</div></section>')
 
     + '<section><h2>' + esc(wk.full) + '</h2>'
     + '<p class="sub">' + (
@@ -732,8 +762,29 @@ function wire(){
       paint(); queue();
     };
   });
-  document.querySelectorAll(".blockers textarea").forEach(function(ta){
-    ta.oninput = function(){ state.blockers[ta.dataset.who] = ta.value; queue(); };
+  document.querySelectorAll("[data-badd]").forEach(function(inp){
+    inp.onkeydown = function(e){
+      if(e.key !== "Enter") return;
+      e.preventDefault();
+      var v = inp.value.trim();
+      if(!v) return;
+      var who = inp.dataset.badd;
+      state.blockers[who] = (state.blockers[who] || []).concat([v]);
+      inp.value = "";
+      paint();
+      var again = document.querySelector('[data-badd="' + who + '"]');
+      if(again) again.focus();
+      queue();
+    };
+  });
+  document.querySelectorAll("[data-bdel]").forEach(function(b){
+    b.onclick = function(){
+      var who = b.dataset.bdel, i = Number(b.dataset.i);
+      var list = (state.blockers[who] || []).slice();
+      list.splice(i, 1);
+      state.blockers[who] = list;
+      paint(); queue();
+    };
   });
   var btn = document.getElementById("savebtn");
   if(btn) btn.onclick = function(){ clearTimeout(timer); save(); };
